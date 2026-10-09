@@ -11,14 +11,16 @@ Design constraints (from threat model, Section 5 of the report):
     without needing an explicit "goodbye" message (handles crashes,
     laptop sleep, network drops, etc.)
 
-Endpoints:
+HTTP endpoints (metadata store):
   POST /register   { "peer_id": "...", "port": 5000 }
       -> registers the caller. IP is taken from the request itself
          (request.remote_addr), NOT from the client-supplied body.
          This matters: if you trusted a client-supplied IP, any peer
          could register spoofed entries and redirect connections
-         elsewhere. Only the port is client-supplied, since the
-         server can't know which local port the peer is listening on.
+         elsewhere.
+      -> "port" should be the peer's PUBLIC UDP port as learned from
+         the STUN-style reflector below, not an arbitrary local port
+         — see NAT_TRAVERSAL note.
 
   GET  /peer/<peer_id>
       -> returns {"peer_id", "ip", "port", "last_seen"} or 404 if
@@ -27,21 +29,35 @@ Endpoints:
   GET  /peers
       -> debug/testing endpoint listing all currently live peers.
 
+UDP endpoint (STUN-style address reflector, NAT_TRAVERSAL):
+  Any UDP packet sent to --stun-port gets a reply containing the
+  ip:port the packet APPEARED to come from, as seen from outside the
+  sender's NAT. A client can't know its own public address any other
+  way — its own OS only knows its private LAN address. This is the
+  same trick STUN/WebRTC use. The client must send this UDP probe
+  from the *same local socket* it intends to use for the peer-to-peer
+  hole-punch attempt (see punch_client.py), otherwise the NAT hands
+  out a different public port for each socket and the discovered
+  address is useless.
+
 Run:
     pip install flask
-    python3 rendezvous_server.py --port 8000
+    python3 rendezvous_server.py --port 8000 --stun-port 8001
 
 Client integration (matches Phase 2 of the implementation plan):
-    1. On startup, and every ~30s thereafter, POST /register to keep
-       the entry alive (must re-register before the 60s TTL expires).
+    1. Open a UDP socket, probe --stun-port to learn your public
+       ip:port, then POST /register with that public port.
+       Re-register every ~30s (must beat the 60s TTL).
     2. Before attempting to reach a group peer, GET /peer/<id> to
-       fetch its current ip:port.
-    3. Attempt a direct TCP connection for ~10s; on failure, fall
-       back to the relay server. The rendezvous server plays no part
-       in that decision — it only ever hands out addresses.
+       fetch its current public ip:port.
+    3. UDP hole-punch to that address for ~10s (see punch_client.py);
+       on failure, fall back to the relay server. The rendezvous
+       server plays no part in that decision — it only ever hands
+       out addresses.
 """
 
 import argparse
+import socket
 import threading
 import time
 
@@ -103,13 +119,34 @@ def _cleanup_loop():
                 del _peers[pid]
 
 
+def _stun_reflector_loop(host: str, port: int):
+    """
+    Minimal STUN-style reflector: reply to every UDP packet with the
+    sender's own (ip, port) as seen from outside their NAT. This is
+    how a peer discovers its own public address before hole-punching.
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind((host, port))
+    print(f" * STUN reflector listening on udp://{host}:{port}")
+
+    while True:
+        data, addr = sock.recvfrom(1024)
+        ip, port_ = addr
+        reply = f"{ip}:{port_}".encode()
+        sock.sendto(reply, addr)
+
+
 def main():
     parser = argparse.ArgumentParser(description="PeerSync rendezvous server")
     parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=8000, help="HTTP port for register/lookup")
+    parser.add_argument("--stun-port", type=int, default=8001, help="UDP port for address reflection")
     args = parser.parse_args()
 
     threading.Thread(target=_cleanup_loop, daemon=True).start()
+    threading.Thread(
+        target=_stun_reflector_loop, args=(args.host, args.stun_port), daemon=True
+    ).start()
     app.run(host=args.host, port=args.port)
 
 
