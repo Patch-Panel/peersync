@@ -2,11 +2,6 @@
 /build/
 /cmake-build-*/
 
-# Compiled binaries
-/ps_client
-/ps_server
-/peersync
-
 # Compiled object and library files
 *.o
 *.a
