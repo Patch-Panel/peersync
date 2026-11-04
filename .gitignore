@@ -1,0 +1,36 @@
+# CMake build directory and generated files
+/build/
+/cmake-build-*/
+
+# Compiled binaries
+/ps_client
+/ps_server
+/peersync
+
+# Compiled object and library files
+*.o
+*.a
+*.so
+*.out
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Python virtual environments
+.venv/
+venv/
+
+# Environment variables / secrets
+.env
+.env.*
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
