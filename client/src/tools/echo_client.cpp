@@ -43,6 +43,7 @@ int main(int argc, char* argv[]) {
         close(sockfd);
         return 1;
     }
+    std::cout << "sent " << message.size() << " bytes\n";
 
     char buffer[1024];
 
