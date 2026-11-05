@@ -34,6 +34,30 @@ bool send_all(int fd, const char* data, size_t len) {
     return true;
 }
 
+bool recv_all(int fd, char* buf, size_t len) {
+    size_t received = 0; // track how many bytes have been received
+
+    while (received < len) {
+        ssize_t n = recv(fd, buf + received, len - received, 0);
+        // buf + received points to remaining space in buffer
+        // len - received is the number of bytes left to receive
+
+        if (n == -1) {
+            if (errno == EINTR) // interrupted by signal, try again
+                continue;
+
+            return false;
+        }
+
+        if (n == 0)
+            return false; // connection closed
+
+        received += static_cast<size_t>(n);
+    }
+
+    return true;
+}
+
 int connect_tcp6(const char* host, const char* port) {
     addrinfo hints{};
     addrinfo* res = nullptr;
