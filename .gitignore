@@ -29,3 +29,7 @@ venv/
 
 # Logs
 *.log
+
+# test stuff
+test.bin
+received.bin
