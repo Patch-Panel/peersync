@@ -1,53 +1,35 @@
 #include "../net/socket_utils.h"
 
+#include <cstring>
 #include <iostream>
 #include <string>
 
-#include <arpa/inet.h>
 #include <cerrno>
 #include <cstdio>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-const char* PORT = "5000";
-const char* HOST = "::1"; // localhost
+constexpr const char* DEFAULT_HOST = "::1";
+constexpr const char* DEFAULT_PORT = "5000";
 
-int main() {
-    addrinfo hints{};
-    addrinfo* res = nullptr;
-
-    hints.ai_family = AF_INET6;      // IPv6
-    hints.ai_socktype = SOCK_STREAM; // TCP
-
-    int status = getaddrinfo(HOST, PORT, &hints, &res);
-
-    if (status != 0) {
-        std::cerr << "getaddrinfo error: " << gai_strerror(status) << '\n';
+int main(int argc, char* argv[]) {
+    if (argc > 3) {
+        std::cerr << "Usage: " << argv[0] << " [host] [port]\n";
         return 1;
     }
-    std::cout << "getaddrinfo success\n";
 
-    int sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    const char* host = (argc >= 2) ? argv[1] : DEFAULT_HOST;
+    const char* port = (argc == 3) ? argv[2] : DEFAULT_PORT;
+
+    int sockfd = connect_tcp6(host, port);
 
     if (sockfd == -1) {
-        std::perror("socket error");
-        freeaddrinfo(res);
+        std::cerr << "Failed to connect to " << host << ":" << port << '\n';
         return 1;
     }
-    std::cout << "socket created\n";
 
-    if (connect(sockfd, res->ai_addr, res->ai_addrlen) == -1) {
-        std::perror("connect error");
-        close(sockfd);
-        freeaddrinfo(res);
-        return 1;
-    }
-    std::cout << "connected to server\n";
-
-    freeaddrinfo(res); // free the linked list
+    std::cout << "Connected to " << host << ":" << port << '\n';
 
     std::string message;
 
@@ -61,8 +43,6 @@ int main() {
         close(sockfd);
         return 1;
     }
-
-    std::cout << "server replied: ";
 
     char buffer[1024];
 
@@ -81,16 +61,13 @@ int main() {
             std::cout << "server disconnected\n";
             break;
         }
-
+        std::cout << "server replied: ";
         std::cout.write(buffer, bytes_received);
 
         bool done = false;
 
-        for (ssize_t i = 0; i < bytes_received; i++) {
-            if (buffer[i] == '\n') {
-                done = true;
-                break;
-            }
+        if (memchr(buffer, '\n', static_cast<size_t>(bytes_received)) != nullptr) {
+            break;
         }
 
         if (done)

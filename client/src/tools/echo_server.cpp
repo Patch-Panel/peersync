@@ -15,64 +15,14 @@ const char* PORT = "5000";
 const int BACKLOG = 5; // pending connections
 
 int main() {
-    addrinfo hints{};
-    addrinfo* res = nullptr;
-
-    hints.ai_family = AF_INET6;      // IPv6
-    hints.ai_socktype = SOCK_STREAM; // TCP
-    hints.ai_flags = AI_PASSIVE;     // use my IP
-
-    int status = getaddrinfo(nullptr, PORT, &hints, &res);
-
-    if (status != 0) {
-        std::cerr << "getaddrinfo error: " << gai_strerror(status) << '\n';
-        return 1;
-    }
-    std::cout << "getaddrinfo success\n";
-
-    int sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    int sockfd = listen_tcp6(PORT);
 
     if (sockfd == -1) {
-        std::perror("socket error");
-        freeaddrinfo(res);
-        return 1;
-    }
-    std::cout << "socket created, fd: " << sockfd << '\n';
-
-    int opt = 1;
-
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
-        perror("setsockopt");
-        close(sockfd);
-        freeaddrinfo(res);
+        std::cerr << "Failed to listen on port " << PORT << '\n';
         return 1;
     }
 
-    int v6only = 1;
-    if (setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only)) == -1) {
-        std::perror("setsockopt error");
-        close(sockfd);
-        freeaddrinfo(res);
-        return 1;
-    }
-    std::cout << "setsockopt success\n";
-
-    if (bind(sockfd, res->ai_addr, res->ai_addrlen) == -1) {
-        std::perror("bind error");
-        close(sockfd);
-        freeaddrinfo(res);
-        return 1;
-    }
-    std::cout << "socket bound\n";
-
-    freeaddrinfo(res); // free the linked list
-
-    if (listen(sockfd, BACKLOG) == -1) {
-        std::perror("listen error");
-        close(sockfd);
-        return 1;
-    }
-    std::cout << "listening on port " << PORT << '\n';
+    std::cout << "Listening on port " << PORT << "...\n";
 
     sockaddr_storage client_addr{};
     socklen_t client_addrlen = sizeof(client_addr);

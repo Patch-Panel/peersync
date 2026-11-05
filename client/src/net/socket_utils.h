@@ -5,4 +5,7 @@
 
 bool send_all(int fd, const char* data, size_t length);
 
+int connect_tcp6(const char* host, const char* port);
+int listen_tcp6(const char* port);
+
 #endif // SOCKET_UTILS_H
