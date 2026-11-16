@@ -1,61 +1,3 @@
-"""
-PeerSync Rendezvous Server
----------------------------
-Minimal, self-hostable peer discovery service.
-
-Design constraints (from threat model, Section 5 of the report):
-  - Stores ONLY transient connection metadata: peer_id -> (ip, port, last_seen)
-  - NEVER sees file content, encryption keys, or file metadata
-  - Compromise of this server must not expose synchronised data
-  - Entries expire automatically (default: 60s) so stale peers vanish
-    without needing an explicit "goodbye" message (handles crashes,
-    laptop sleep, network drops, etc.)
-
-HTTP endpoints (metadata store):
-  POST /register   { "peer_id": "...", "port": 5000 }
-      -> registers the caller. IP is taken from the request itself
-         (request.remote_addr), NOT from the client-supplied body.
-         This matters: if you trusted a client-supplied IP, any peer
-         could register spoofed entries and redirect connections
-         elsewhere.
-      -> "port" should be the peer's PUBLIC UDP port as learned from
-         the STUN-style reflector below, not an arbitrary local port
-         — see NAT_TRAVERSAL note.
-
-  GET  /peer/<peer_id>
-      -> returns {"peer_id", "ip", "port", "last_seen"} or 404 if
-         unknown / expired.
-
-  GET  /peers
-      -> debug/testing endpoint listing all currently live peers.
-
-UDP endpoint (STUN-style address reflector, NAT_TRAVERSAL):
-  Any UDP packet sent to --stun-port gets a reply containing the
-  ip:port the packet APPEARED to come from, as seen from outside the
-  sender's NAT. A client can't know its own public address any other
-  way — its own OS only knows its private LAN address. This is the
-  same trick STUN/WebRTC use. The client must send this UDP probe
-  from the *same local socket* it intends to use for the peer-to-peer
-  hole-punch attempt (see punch_client.py), otherwise the NAT hands
-  out a different public port for each socket and the discovered
-  address is useless.
-
-Run:
-    pip install flask
-    python3 rendezvous_server.py --port 8000 --stun-port 8001
-
-Client integration (matches Phase 2 of the implementation plan):
-    1. Open a UDP socket, probe --stun-port to learn your public
-       ip:port, then POST /register with that public port.
-       Re-register every ~30s (must beat the 60s TTL).
-    2. Before attempting to reach a group peer, GET /peer/<id> to
-       fetch its current public ip:port.
-    3. UDP hole-punch to that address for ~10s (see punch_client.py);
-       on failure, fall back to the relay server. The rendezvous
-       server plays no part in that decision — it only ever hands
-       out addresses.
-"""
-
 import argparse
 import socket
 import threading
@@ -120,11 +62,7 @@ def _cleanup_loop():
 
 
 def _stun_reflector_loop(host: str, port: int):
-    """
-    Minimal STUN-style reflector: reply to every UDP packet with the
-    sender's own (ip, port) as seen from outside their NAT. This is
-    how a peer discovers its own public address before hole-punching.
-    """
+    
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((host, port))
     print(f" * STUN reflector listening on udp://{host}:{port}")
