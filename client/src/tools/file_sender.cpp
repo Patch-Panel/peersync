@@ -10,11 +10,12 @@
 
 #include <unistd.h>
 
-constexpr const char* HOST = "::1";
-constexpr const char* PORT = "5001";
 constexpr size_t BUFFER_SIZE = 64 * 1024;
 
-int main() {
+int main(int argc, char* argv[]) {
+    const char* host = (argc > 1) ? argv[1] : "::1";
+    const char* port = (argc > 2) ? argv[2] : "5001";
+
     const char* filename = "test.bin";
 
     std::ifstream file(filename, std::ios::binary);
@@ -32,7 +33,7 @@ int main() {
         return 1;
     }
 
-    int sockfd = connect_tcp6(HOST, PORT);
+    int sockfd = connect_tcp6(host, port);
 
     if (sockfd == -1) {
         std::cerr << "could not connect to receiver\n";
